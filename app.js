@@ -1,6 +1,6 @@
 import * as THREE from 'https://threejs.org/build/three.module.js';
-import { GLTFLoader } from 'https://threejs.org/examples/js/loaders/GLTFLoader.js';
-import { RGBELoader } from 'https://threejs.org/examples/js/loaders/RGBELoader.js';
+import * as GLTFLoader from 'https://threejs.org/examples/js/loaders/GLTFLoader.js';
+import * as RGBELoader from 'https://threejs.org/examples/js/loaders/RGBELoader.js';
 import { ARButton } from './libs/ARButton.js';
 import { LoadingBar } from './libs/LoadingBar.js';
 
