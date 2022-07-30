@@ -1,57 +1,79 @@
-
-import * as THREE from '../../libs/three/three.module.js';
-import { GLTFLoader } from '../../libs/three/jsm/GLTFLoader.js';
-import { DRACOLoader } from '../../libs/three/jsm/DRACOLoader.js';
-import { RGBELoader } from '../../libs/three/jsm/RGBELoader.js';
-import { Stats } from '../../libs/stats.module.js';
-import { LoadingBar } from '../../libs/LoadingBar.js';
-import { VRButton } from '../../libs/VRButton.js';
-import { XRControllerModelFactory } from '../../libs/three/jsm/XRControllerModelFactory.js';
+import { ARButton } from 'libs/ARButton.js';
+import { LoadingBar } from 'libs/LoadingBar.js';
 
 class App{
 	constructor(){
 		const container = document.createElement( 'div' );
 		document.body.appendChild( container );
-
-		this.assetsPath = '../../assets/';
         
-		this.camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.01, 500 );
+        this.loadingBar = new LoadingBar();
+        this.loadingBar.visible = false;
+
+		this.assetsPath = '../../assets/ar-shop/';
+        
+		this.camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 0.01, 20 );
 		this.camera.position.set( 0, 1.6, 0 );
         
-        this.dolly = new THREE.Object3D(  );
-        this.dolly.position.set(0, 0, 10);
-        this.dolly.add( this.camera );
-        this.dummyCam = new THREE.Object3D();
-        this.camera.add( this.dummyCam );
-        
 		this.scene = new THREE.Scene();
-        this.scene.add( this.dolly );
-        
-		const ambient = new THREE.HemisphereLight(0xFFFFFF, 0xAAAAAA, 0.8);
+
+		const ambient = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+        ambient.position.set( 0.5, 1, 0.25 );
 		this.scene.add(ambient);
 			
-		this.renderer = new THREE.WebGLRenderer({ antialias: true });
+		this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true } );
 		this.renderer.setPixelRatio( window.devicePixelRatio );
 		this.renderer.setSize( window.innerWidth, window.innerHeight );
-		this.renderer.outputEncoding = THREE.sRGBEncoding;
+        this.renderer.outputEncoding = THREE.sRGBEncoding;
 		container.appendChild( this.renderer.domElement );
         this.setEnvironment();
-	
-        window.addEventListener( 'resize', this.resize.bind(this) );
         
-        this.clock = new THREE.Clock();
-        this.up = new THREE.Vector3(0,1,0);
-        this.origin = new THREE.Vector3();
-        this.raycaster = new THREE.Raycaster();
+        this.reticle = new THREE.Mesh(
+            new THREE.RingBufferGeometry( 0.15, 0.2, 32 ).rotateX( - Math.PI / 2 ),
+            new THREE.MeshBasicMaterial()
+        );
         
-        this.stats = new Stats();
-		container.appendChild( this.stats.dom );
+        this.reticle.matrixAutoUpdate = false;
+        this.reticle.visible = false;
+        this.scene.add( this.reticle );
         
-		this.loadingBar = new LoadingBar();
+        this.setupXR();
 		
-		this.loadCollege();
+		window.addEventListener('resize', this.resize.bind(this) );
+        
 	}
+    
+    setupXR(){
+        this.renderer.xr.enabled = true;
+        
+        //TO DO 1: If navigator includes xr and immersive-ar is supported then show the ar-button class
+        
+        
+        const self = this;
+
+        this.hitTestSourceRequested = false;
+        this.hitTestSource = null;
+        
+        function onSelect() {
+            if (self.chair===undefined) return;
+            
+            if (self.reticle.visible){
+                self.chair.position.setFromMatrixPosition( self.reticle.matrix );
+                self.chair.visible = true;
+            }
+        }
+
+        this.controller = this.renderer.xr.getController( 0 );
+        this.controller.addEventListener( 'select', onSelect );
+        
+        this.scene.add( this.controller );
+    }
 	
+    resize(){
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+    	this.camera.updateProjectionMatrix();
+    	this.renderer.setSize( window.innerWidth, window.innerHeight ); 
+    }
+    
     setEnvironment(){
         const loader = new RGBELoader().setDataType( THREE.UnsignedByteType );
         const pmremGenerator = new THREE.PMREMGenerator( this.renderer );
@@ -70,51 +92,29 @@ class App{
         } );
     }
     
-    resize(){
-        this.camera.aspect = window.innerWidth / window.innerHeight;
-        this.camera.updateProjectionMatrix();
-        this.renderer.setSize( window.innerWidth, window.innerHeight );  
-    }
-    
-	loadCollege(){
+	showChair(id){
+        this.initAR();
         
 		const loader = new GLTFLoader( ).setPath(this.assetsPath);
-        const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath( '../../libs/three/js/draco/' );
-        loader.setDRACOLoader( dracoLoader );
-        
         const self = this;
+        
+        this.loadingBar.visible = true;
 		
 		// Load a glTF resource
 		loader.load(
 			// resource URL
-			'college.glb',
+			`chair${id}.glb`,
 			// called when the resource is loaded
 			function ( gltf ) {
 
-                const college = gltf.scene.children[0];
-				self.scene.add( college );
-				
-				college.traverse(function (child) {
-    				if (child.isMesh){
-						if (child.name.indexOf("PROXY")!=-1){
-							child.material.visible = false;
-							self.proxy = child;
-						}else if (child.material.name.indexOf('Glass')!=-1){
-                            child.material.opacity = 0.1;
-                            child.material.transparent = true;
-                        }else if (child.material.name.indexOf("SkyBox")!=-1){
-                            const mat1 = child.material;
-                            const mat2 = new THREE.MeshBasicMaterial({map: mat1.map});
-                            child.material = mat2;
-                            mat1.dispose();
-                        }
-					}
-				});
-                        
+				self.scene.add( gltf.scene );
+                self.chair = gltf.scene;
+        
+                self.chair.visible = false; 
+                
                 self.loadingBar.visible = false;
-			
-                self.setupXR();
+                
+                self.renderer.setAnimationLoop( self.render.bind(self) );
 			},
 			// called while loading is progressing
 			function ( xhr ) {
@@ -129,111 +129,71 @@ class App{
 
 			}
 		);
-	}
+	}			
     
-    setupXR(){
-        this.renderer.xr.enabled = true;
-
-        const btn = new VRButton( this.renderer );
+    initAR(){
+        //TO DO 2: Start an AR session
         
+    }
+    
+    requestHitTestSource(){
         const self = this;
         
-        function onSelectStart( event ) {
-        
-            this.userData.selectPressed = true;
-        
-        }
+        const session = this.renderer.xr.getSession();
 
-        function onSelectEnd( event ) {
-        
-            this.userData.selectPressed = false;
-        
-        }
-        
-        this.controllers = this.buildControllers( this.dolly );
-        
-        this.controllers.forEach( ( controller ) =>{
-            controller.addEventListener( 'selectstart', onSelectStart );
-            controller.addEventListener( 'selectend', onSelectEnd );
-        });
-        
-        this.renderer.setAnimationLoop( this.render.bind(this) );
-    }
-    
-    buildControllers( parent = this.scene ){
-        const controllerModelFactory = new XRControllerModelFactory();
-
-        const geometry = new THREE.BufferGeometry().setFromPoints( [ new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, -1 ) ] );
-
-        const line = new THREE.Line( geometry );
-        line.scale.z = 0;
-        
-        const controllers = [];
-        
-        for(let i=0; i<=1; i++){
-            const controller = this.renderer.xr.getController( i );
-            controller.add( line.clone() );
-            controller.userData.selectPressed = false;
-            parent.add( controller );
-            controllers.push( controller );
+        session.requestReferenceSpace( 'viewer' ).then( function ( referenceSpace ) {
             
-            const grip = this.renderer.xr.getControllerGrip( i );
-            grip.add( controllerModelFactory.createControllerModel( grip ) );
-            parent.add( grip );
-        }
-        
-        return controllers;
-    }
-    
-    moveDolly(dt){
-       if (this.proxy === undefined) return;
-        
-        const wallLimit = 1.3;
-        const speed = 2;
-		let pos = this.dolly.position.clone();
-        pos.y += 1;
-        
-		let dir = new THREE.Vector3();
-        //Store original dolly rotation
-        const quaternion = this.dolly.quaternion.clone();
-        //Get rotation for movement from the headset pose
-        this.dolly.quaternion.copy( this.dummyCam.getWorldQuaternion() );
-		this.dolly.getWorldDirection(dir);
-        dir.negate();
-		this.raycaster.set(pos, dir);
-		
-        let blocked = false;
-		
-		let intersect = this.raycaster.intersectObject(this.proxy);
-        if (intersect.length>0){
-            if (intersect[0].distance < wallLimit) blocked = true;
-        }
-		
-		if (!blocked){
-            this.dolly.translateZ(-dt*speed);
-            pos = this.dolly.getWorldPosition( this.origin );
-		}
+            session.requestHitTestSource( { space: referenceSpace } ).then( function ( source ) {
 
-        //Enter code here
-        
-        //Restore the original rotation
-        this.dolly.quaternion.copy( quaternion ); 
-	}
-		
-    get selectPressed(){
-        return ( this.controllers !== undefined && (this.controllers[0].userData.selectPressed || this.controllers[1].userData.selectPressed) );    
+                self.hitTestSource = source;
+
+            } );
+
+        } );
+
+        session.addEventListener( 'end', function () {
+
+            self.hitTestSourceRequested = false;
+            self.hitTestSource = null;
+            self.referenceSpace = null;
+
+        } );
+
+        this.hitTestSourceRequested = true;
+
     }
     
-	render( timestamp, frame ){
-        const dt = this.clock.getDelta();
-        
-        if (this.renderer.xr.isPresenting && this.selectPressed){
-            this.moveDolly(dt);
+    getHitTestResults( frame ){
+        const hitTestResults = frame.getHitTestResults( this.hitTestSource );
+
+        if ( hitTestResults.length ) {
+            
+            const referenceSpace = this.renderer.xr.getReferenceSpace();
+            const hit = hitTestResults[ 0 ];
+            const pose = hit.getPose( referenceSpace );
+
+            this.reticle.visible = true;
+            this.reticle.matrix.fromArray( pose.transform.matrix );
+
+        } else {
+
+            this.reticle.visible = false;
+
         }
-        
-        this.stats.update();
-		this.renderer.render(this.scene, this.camera);
-	}
+
+    }
+    
+	render( timestamp, frame ) {
+
+        if ( frame ) {
+            if ( this.hitTestSourceRequested === false ) this.requestHitTestSource( )
+
+            if ( this.hitTestSource ) this.getHitTestResults( frame );
+        }
+
+        this.renderer.render( this.scene, this.camera );
+
+    }
 }
 
 export { App };
