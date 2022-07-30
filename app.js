@@ -1,5 +1,5 @@
-import { ARButton } from './libs/ARButton';
-import { LoadingBar } from './libs/LoadingBar';
+import { ARButton } from './libs/ARButton.js';
+import { LoadingBar } from './libs/LoadingBar.js';
 
 class App{
 	constructor(){
